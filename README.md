@@ -1,8 +1,8 @@
-# Uint128-Class
-128-bit unsigned integer class
-  Formed by combining 2 64-bit unsigned integers
-  Includes all operators and ctype definitions
+# Uint128-Class<br>
+128-bit unsigned integer class<br>
+  Formed by combining 2 64-bit unsigned integers<br>
+  Includes all operators and ctype definitions<br>
   
-Having trouble with multiplication and division operators
-  Ended up brute-forcing multiplication using nested loops.
-  Plan to use multiplicative inverse to perform division.
+Having trouble with multiplication and division operators.<br>
+  Ended up brute-forcing multiplication using nested loops.<br>
+  Plan to use multiplicative inverse to perform division.<br>
