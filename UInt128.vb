@@ -1,8 +1,9 @@
-﻿' Module:   128-bit Unsigned Integer Class
+﻿Option Explicit On
+Option Strict On
+' Module:   128-bit Unsigned Integer Class
 ' Author:   James Merrill
 
-Option Explicit On
-Option Strict On
+Imports IP_SummaryV2
 
 Public Class UInt128
   ' High- and Low-order QWords
@@ -44,6 +45,23 @@ Public Class UInt128
     Hi = arg128.Hi
     Lo = arg128.Lo
   End Sub
+
+  Private Property Bit(Position As Integer) As Integer
+    Get
+      If position > 63 Then
+        Return CInt((Hi And 1UL << (position - 64)) >> (position - 64))
+      Else
+        Return CInt((Lo And 1UL << position) >> position)
+      End If
+    End Get
+    Set(value As Integer)
+      If position > 63 Then
+        Hi = Hi Or (1UL << (position - 64))
+      Else
+        Lo = Lo Or (1UL << position)
+      End If
+    End Set
+  End Property
 
   ' Widen all Int/UInt types to UInt128. Reduces the number of overloads required for operators
   Public Shared Widening Operator CType(ByVal argULng As ULong) As UInt128
@@ -140,42 +158,54 @@ Public Class UInt128
     Return New UInt128(lngResults(3) << 32 Or lngResults(2), lngResults(1) << 32 Or lngResults(0))
   End Operator
 
-  ' Division - Multiply by Multiplicative Inverse
+  ' Division - Shift algorithm
+  ' Adapted from https://en.wikipedia.org/wiki/Division_algorithm
   Public Shared Operator \(ByVal argLeft As UInt128, ByVal argRight As UInt128) As UInt128
-    ' Declare variables
-    Dim intShift As Integer = 0 ' Track divisor shifting
-    ' Find shift to drop trailing binary 0s
-    Do Until ((argRight >> intShift) And 1) = 1
-      intShift += 1
-    Loop
-    ' Get multiplicative inverse of shifted divisor
-    Dim uxlInverse As UInt128 = +(argRight >> intShift)
-
-#If False Then
-    Dim intParts() As ULong = {argLeft.Lo And &HFFFFFFFFUL, argLeft.Lo >> 32, argLeft.Hi And &HFFFFFFFFUL, argLeft.Hi >> 32}
-    ' Remainder from each division
-    Dim intRemainder As UInteger = 0
-    ' Divisor for each division
-    Dim lng64 As ULong
-    ' 4 32-bit parts derived by ANDing and shifting the 2 64-bit parts
-    ' Loop for each of the 4 parts
-    For i = 3 To 0 Step -1
-      ' Combine remainder with next part to manipulate
-      lng64 = CULng(intRemainder) << 32 Or intParts(i)
-      ' Save the remainder for the next part
-      intRemainder = CUInt(lng64 Mod argRight)
-      ' Calculate this division
-      intParts(i) = CUInt(lng64 \ argRight)
-    Next ' i
-    ' Recombine the parts into 128 bits and return
-    Return New UInt128(CULng(intParts(3)) << 32 Or intParts(2), CULng(intParts(1)) << 32 Or intParts(0))
-#End If
+    If argRight = 0 OrElse argRight > argLeft Then Return 0
+    Dim uxlQuotient As UInt128 = 0
+    Dim uxlRemainder As UInt128 = 0
+    Dim intBits As Integer = argLeft.BitsUsed
+    For i = intBits - 1 To 0 Step -1
+      uxlRemainder = uxlRemainder << 1
+      uxlRemainder.Bit(0) = argLeft.Bit(i)
+      If uxlRemainder >= argRight Then
+        uxlRemainder -= argRight
+        uxlQuotient.Bit(i) = 1
+      End If
+    Next
+    Return uxlQuotient
   End Operator
+
+  Public Function BitsUsed() As Integer
+    Dim lngTest As ULong
+    Dim blnHi As Boolean = True
+    Dim intReturn As Integer = 0
+    If Hi = 0 Then
+      lngTest = Lo
+      blnHi = False
+    Else
+      lngTest = Hi
+    End If
+    Do Until intReturn > 63 OrElse lngTest < (1UL << intReturn)
+      intReturn += 1
+    Loop
+    If blnHi Then intReturn += 64
+    Return intReturn
+  End Function
 
   ' Mod operator
   Public Shared Operator Mod(ByVal argLeft As UInt128, ByVal argRight As UInt128) As UInt128
     ' a - (b * (a \ b))
     Return argLeft - ((argLeft \ argRight) * argLeft)
+  End Operator
+
+  ' Exponent
+  Public Shared Operator ^(ArgLeft As UInt128, argRight As Integer) As UInt128
+    Dim uxlExponent As UInt128 = 1
+    For i = 1 To argRight
+      uxlExponent *= ArgLeft
+    Next
+    Return uxlExponent
   End Operator
 
   ' Shift right
@@ -185,10 +215,10 @@ Public Class UInt128
       Return argLeft << -argRight
     ElseIf argRight <= 64 Then
       ' Shift bits into the low-order QWord
-      Return New UInt128(argLeft.Hi >> argRight, argLeft.Lo >> argRight Or argLeft.Hi << (64 - argRight))
+      Return New UInt128(argLeft.Hi >> argRight, (argLeft.Lo >> argRight) Or (argLeft.Hi << (64 - argRight)))
     Else
       ' High-order QWord is zeroed and remainder of shift moves its bits into the Low-order QWord
-      Return argLeft.Hi >> argRight - 64
+      Return New UInt128(0, argLeft.Hi >> (argRight - 64))
     End If
   End Operator
 
@@ -199,7 +229,7 @@ Public Class UInt128
       Return argLeft >> -argRight
     ElseIf argRight <= 64 Then
       ' Shift bits into high-or
-      Return New UInt128(argLeft.Hi << argRight Or argLeft.Lo >> (64 - argRight), argLeft.Lo << argRight)
+      Return New UInt128((argLeft.Hi << argRight) Or (argLeft.Lo >> (64 - argRight)), argLeft.Lo << argRight)
     Else
       Return New UInt128(argLeft.Lo << argRight - 64, 0)
     End If
