@@ -5,4 +5,5 @@
   
 Having trouble with multiplication and division operators.<br>
   Ended up brute-forcing multiplication using nested loops.<br>
-  Plan to use multiplicative inverse to perform division.<br>
+  I ended up using a shift algorithm for division.<br>
+  
