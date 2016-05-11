@@ -2,6 +2,8 @@ Option Explicit On
 Option Strict On
 ' Module:   128-bit Unsigned Integer Class
 ' Author:   James Merrill
+' Note:     I am using uxl as the variable name prefix for this class
+'           (Unsigned eXtra Large)
 
 Public Class UInt128
   ' High- and Low-order QWords
@@ -39,6 +41,7 @@ Public Class UInt128
     _lo = argLo
   End Sub
   ' Copy values from existing UInt128
+  ' Can use CType operator to feed value into this Sub
   Public Sub New(ByVal arg128 As UInt128)
     ' Take values from arg and save internally
     _hi = arg128.Hi
@@ -49,7 +52,7 @@ Public Class UInt128
   ' When setting, any non-zero value evaluates to 1
   Public Property Bit(ByVal Position As Integer) As Integer
     ' Position is 0-based, with bit(0) being the lowest-order bit
-    Get ' Retrieve the 
+    Get ' Retrieve the requested bit
       If Position > 63 Then
         ' Return bit from High part
         Return CInt((_hi >> (Position - 64)) And 1UL)
@@ -57,16 +60,17 @@ Public Class UInt128
         Return CInt((_lo >> Position) And 1UL)
       End If
     End Get
+    ' Set the specified bit
     Set(value As Integer)
       If Position > 63 Then
-        ' Operate on High part
+        ' Operate on High QWord
         If value <> 0 Then
           ' Set bit
           _hi = _hi Or (1UL << (Position - 64))
         Else ' Clear bit
           _hi = _hi And Not (1UL << (Position - 64))
         End If
-      Else ' Operate on Low part
+      Else ' Operate on Low QWord
         If value <> 0 Then
           ' Set bit
           _lo = _lo Or (1UL << Position)
@@ -78,12 +82,13 @@ Public Class UInt128
   End Property
 
   ' Returns the number of bits used (1-based)
-  Public ReadOnly Property BitLength As Integer
+  Public ReadOnly Property Length As Integer
     Get
       ' Set testing variables for High part
       Dim intReturn As Integer = 128
       If _hi = 0 Then
-        If _lo = 0 Then Return 0 ' No bits used
+        ' No bits used - 0 length
+        If _lo = 0 Then Return 0
         ' Set variable for Low part
         intReturn = 64
       End If
@@ -91,23 +96,33 @@ Public Class UInt128
       Do Until Bit(intReturn - 1) = 1
         intReturn -= 1
       Loop
+      ' Return Length
       Return intReturn
     End Get
   End Property
 
+  ' Minimum Value for this class
+  Public ReadOnly Property MinValue As UInt128
+    Get
+      ' Return 0
+      Return CType(0, UInt128)
+    End Get
+  End Property
+  ' Maximum value for this class
   Public ReadOnly Property MaxValue As UInt128
     Get
       ' Create a 0 value variable
-      Dim strReturn As UInt128 = 0
+      Dim uxlReturn As UInt128 = 0
       ' Invert and return it - If it were a signed variable I would turn off bit 127
-      Return Not strReturn
+      Return Not uxlReturn
     End Get
   End Property
 
   ' Return Hex string
   Public ReadOnly Property ToHex As String
     Get
-      Return Hex(Hi).PadLeft(16, CChar("0")) + Hex(Lo).PadLeft(16, CChar("0"))
+      ' Gives full 128 character hex string, left padded with 0's.
+      Return Hex(Hi).PadLeft(16, "0"c) + Hex(Lo).PadLeft(16, "0"c)
     End Get
   End Property
 
@@ -115,11 +130,14 @@ Public Class UInt128
   Public Shadows ReadOnly Property ToString As String
     Get
       Dim strOut As String = ""
-      Dim uxlHold As New UInt128(_hi, _lo)
+      Dim uxlHold As UInt128 = (CType(_hi, UInt128) << 64) Or _lo
       Do While uxlHold > 0
-        strOut = CType(uxlHold Mod 10, UInteger).ToString + strOut
+        ' Convert each bit (lowest to highest) to a string and add it
+        ' to the front of the output string
+        strOut = strOut.Insert(0, CType(uxlHold Mod 10, UInteger).ToString)
         uxlHold \= 10
       Loop
+      ' If nothing has been put into strOut, return "0"
       If strOut.Length = 0 Then strOut = "0"
       Return strOut
     End Get
@@ -149,10 +167,11 @@ Public Class UInt128
   End Operator
 
   ' Narrow UInt128 to ULong
-  Public Shared Narrowing Operator CType(v As UInt128) As ULong
-    If v.Hi = 0 Then
-      Return v.Lo
-    Else
+  Public Shared Narrowing Operator CType(arg128 As UInt128) As ULong
+    ' Only valid if High QWord is 0
+    If arg128.Hi = 0 Then
+      Return arg128.Lo
+    Else ' Overflow error
       Throw New OverflowException()
     End If
   End Operator
@@ -197,7 +216,7 @@ Public Class UInt128
   Public Shared Operator +(ByVal argLeft As UInt128, ByVal argRight As UInt128) As UInt128
     Dim uxlResult As UInt128 = 0
     Dim blnCarry As Boolean = False
-    ' Check for overflow
+    ' Check for and prevent overflow
     If argLeft.Lo > ULong.MaxValue - argRight.Lo Then
       ' Subtract difference between 2^64 and argRight.lo from argLeft.lo
       uxlResult.Lo = argLeft.Lo - (ULong.MaxValue - argRight.Lo + 1UL)
@@ -215,9 +234,10 @@ Public Class UInt128
     End If
     ' If carry flag is set, add 1 to hi
     If blnCarry Then
+      ' Avoid overflow error - If Hi is at max, roll it to 0
       If uxlResult.Hi = ULong.MaxValue Then
         uxlResult.Hi = 0
-      Else
+      Else ' Add 1 for carry
         uxlResult.Hi += 1UL
       End If
     End If
@@ -225,6 +245,7 @@ Public Class UInt128
   End Operator
 
   ' Multiply - Overflow is dropped
+  ' Speed test shows 1000x faster than bitwise
   Public Shared Operator *(ByVal argLeft As UInt128, ByVal argRight As UInt128) As UInt128
     ' Split each arg into 4 32-bit parts
     Dim intLeftParts() As UInteger = {CUInt(argLeft.Lo And &HFFFFFFFFUL), CUInt(argLeft.Lo >> 32), CUInt(argLeft.Hi And &HFFFFFFFFUL), CUInt(argLeft.Hi >> 32)}
@@ -241,7 +262,7 @@ Public Class UInt128
       Next ' j 
     Next ' i 
     ' Put result together and return it - Overflow is dropped
-    Return New UInt128(lngResults(3) << 32 Or lngResults(2), lngResults(1) << 32 Or lngResults(0))
+    Return (CType(lngResults(3), UInt128) << 96) Or (CType(lngResults(2), UInt128) << 64) Or (CType(lngResults(1), UInt128) << 32) Or lngResults(0)
   End Operator
 
   ' Division - Shift algorithm
@@ -255,7 +276,7 @@ Public Class UInt128
     Dim uxlQuotient As UInt128 = 0
     Dim uxlRemainder As UInt128 = 0
     ' Bit length of stored numerator
-    Dim intBits As Integer = argLeft.BitLength
+    Dim intBits As Integer = argLeft.Length
     ' Loop to process each bit
     For i = intBits - 1 To 0 Step -1
       ' Shift remainder
@@ -274,6 +295,12 @@ Public Class UInt128
     Return uxlQuotient
   End Operator
 
+  ' / Operator - added for completeness
+  ' Only refers arguements to \ operator
+  Public Shared Operator /(ByVal argLeft As UInt128, ByVal argRight As UInt128) As UInt128
+    Return argLeft \ argRight
+  End Operator
+
   ' Mod operator - Shift algorithm
   ' Adapted from https://en.wikipedia.org/wiki/Division_algorithm
   Public Shared Operator Mod(ByVal argLeft As UInt128, ByVal argRight As UInt128) As UInt128
@@ -284,7 +311,7 @@ Public Class UInt128
     Dim uxlQuotient As UInt128 = 0
     Dim uxlRemainder As UInt128 = 0
     ' Bit length of stored numerator
-    Dim intBits As Integer = argLeft.BitLength
+    Dim intBits As Integer = argLeft.Length
     ' Loop to process each bit
     For i = intBits - 1 To 0 Step -1
       ' Shift remainder
@@ -299,15 +326,21 @@ Public Class UInt128
         uxlQuotient.Bit(i) = 1
       End If
     Next
+    ' Return Modulus
     Return uxlRemainder
   End Operator
 
   ' Exponent
+  Private Const blnNewExp = False
   Public Shared Operator ^(argLeft As UInt128, argRight As Integer) As UInt128
+    ' Prime output to 1
     Dim uxlExponent As UInt128 = 1
+    ' Loop argRight times
     For i = 1 To argRight
+      ' Multiply accumulator with argLeft
       uxlExponent *= argLeft
-    Next
+    Next ' i
+    ' Return result
     Return uxlExponent
   End Operator
 
@@ -333,7 +366,7 @@ Public Class UInt128
   Public Shared Operator <<(ByVal argLeft As UInt128, ByVal argRight As Integer) As UInt128
     ' Never shift more than 127 bits
     Dim intShift As Integer = argRight Mod 128
-    If argRight = 0 Then
+    If intShift = 0 Then
       Return argLeft
     ElseIf argRight < 0 Then
       ' Negative shift? Shift right instead
@@ -342,7 +375,8 @@ Public Class UInt128
       ' Shift bits into high-or
       Return New UInt128((argLeft.Hi << intShift) Or (argLeft.Lo >> (64 - intShift)), argLeft.Lo << intShift)
     Else
-      Return argLeft.Lo << (intShift - 64)
+      ' Low order QWord is 0, shifts into high order QWord
+      Return New UInt128(argLeft.Lo << (intShift - 64), 0)
     End If
   End Operator
 
@@ -383,7 +417,7 @@ Public Class UInt128
     Return Not (argLeft > argRight)
   End Operator
 
-  ' IsTrue and IsFalse - used for "-Also" shortcutting
+  ' IsTrue and IsFalse - used for "AndAlso" and "OrElse" shortcutting
   Public Shared Operator IsFalse(ByVal arg128 As UInt128) As Boolean
     ' If the value is 0, all subsequent -And- operators will result in 0
     Return arg128 = 0
