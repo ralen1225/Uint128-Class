@@ -331,7 +331,6 @@ Public Class UInt128
   End Operator
 
   ' Exponent
-  Private Const blnNewExp = False
   Public Shared Operator ^(argLeft As UInt128, argRight As Integer) As UInt128
     ' Prime output to 1
     Dim uxlExponent As UInt128 = 1
@@ -353,7 +352,7 @@ Public Class UInt128
     ElseIf argRight < 0 Then
       ' Negative shift? Shift left instead
       Return argLeft << -argRight
-    ElseIf intShift <= 64 Then
+    ElseIf intShift < 64 Then
       ' Shift bits into the low-order QWord
       Return New UInt128(argLeft.Hi >> intShift, (argLeft.Lo >> intShift) Or (argLeft.Hi << (64 - intShift)))
     Else
@@ -371,7 +370,7 @@ Public Class UInt128
     ElseIf argRight < 0 Then
       ' Negative shift? Shift right instead
       Return argLeft >> -argRight
-    ElseIf intShift <= 64 Then
+    ElseIf intShift < 64 Then
       ' Shift bits into high-or
       Return New UInt128((argLeft.Hi << intShift) Or (argLeft.Lo >> (64 - intShift)), argLeft.Lo << intShift)
     Else
