@@ -48,6 +48,11 @@ Public Class UInt128
     _lo = arg128.Lo
   End Sub
 
+  ' Minimum Value for this class
+  Public Shared ReadOnly MinValue As UInt128 = CType(0, UInt128)
+  ' Maximum value for this class
+  Public Shared ReadOnly MaxValue As UInt128 = Not CType(0, UInt128)
+
   ' Always gives either 1 or 0
   ' When setting, any non-zero value evaluates to 1
   Public Property Bit(ByVal Position As Integer) As Integer
@@ -101,23 +106,6 @@ Public Class UInt128
     End Get
   End Property
 
-  ' Minimum Value for this class
-  Public ReadOnly Property MinValue As UInt128
-    Get
-      ' Return 0
-      Return CType(0, UInt128)
-    End Get
-  End Property
-  ' Maximum value for this class
-  Public ReadOnly Property MaxValue As UInt128
-    Get
-      ' Create a 0 value variable
-      Dim uxlReturn As UInt128 = 0
-      ' Invert and return it - If it were a signed variable I would turn off bit 127
-      Return Not uxlReturn
-    End Get
-  End Property
-
   ' Return Hex string
   Public ReadOnly Property ToHex As String
     Get
@@ -152,7 +140,7 @@ Public Class UInt128
       If "0123456789".Contains(argString.Substring(i, 1)) Then
         ' Add the next digit - Use CUInt because we know it's a digit here
         arg128 = arg128 * 10 + CUInt(argString.Substring(i, 1))
-      Else ' Bad character - Toss the whole thing out
+      Else ' Bad character - toss the whole thing out
         arg128 = 0
         Return False
       End If
@@ -419,13 +407,11 @@ Public Class UInt128
   ' IsTrue and IsFalse - used for "AndAlso" and "OrElse" shortcutting
   Public Shared Operator IsFalse(ByVal arg128 As UInt128) As Boolean
     ' If the value is 0, all subsequent -And- operators will result in 0
-    Return arg128 = 0
+    Return arg128 = MinValue
   End Operator
 
   Public Shared Operator IsTrue(ByVal arg128 As UInt128) As Boolean
-    ' Compiler won't allow me to use Maxvalue without defining a variable to refer from
-    Dim uxlTemp As UInt128 = 0
     ' If the value is MaxValue, all subsequent -Or- operators will result in MaxValue
-    Return arg128 = uxlTemp.MaxValue
+    Return arg128 = MaxValue
   End Operator
 End Class
