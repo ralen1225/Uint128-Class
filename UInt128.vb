@@ -10,6 +10,12 @@ Public Class UInt128
   Private _hi As ULong
   Private _lo As ULong
 
+  ' Treat these as constants
+  ' Minimum Value for this class
+  Public Shared ReadOnly MinValue As UInt128 = 0
+  ' Maximum value for this class
+  Public Shared ReadOnly MaxValue As UInt128 = Not MinValue
+
   ' Outside access to _hi and _lo
   Public Property Hi As ULong
     Get
@@ -42,45 +48,40 @@ Public Class UInt128
   End Sub
   ' Copy values from existing UInt128
   ' Can use CType operator to feed value into this Sub
-  Public Sub New(ByVal arg128 As UInt128)
+  Public Sub New(ByRef arg128 As UInt128)
     ' Take values from arg and save internally
     _hi = arg128.Hi
     _lo = arg128.Lo
   End Sub
 
-  ' Minimum Value for this class
-  Public Shared ReadOnly MinValue As UInt128 = CType(0, UInt128)
-  ' Maximum value for this class
-  Public Shared ReadOnly MaxValue As UInt128 = Not CType(0, UInt128)
-
   ' Always gives either 1 or 0
   ' When setting, any non-zero value evaluates to 1
-  Public Property Bit(ByVal Position As Integer) As Integer
+  Public Property Bit(ByVal position As Integer) As Integer
     ' Position is 0-based, with bit(0) being the lowest-order bit
     Get ' Retrieve the requested bit
-      If Position > 63 Then
+      If position > 63 Then
         ' Return bit from High part
-        Return CInt((_hi >> (Position - 64)) And 1UL)
+        Return CInt((_hi >> (position - 64)) And 1UL)
       Else ' Return bit from Low part
-        Return CInt((_lo >> Position) And 1UL)
+        Return CInt((_lo >> position) And 1UL)
       End If
     End Get
     ' Set the specified bit
     Set(value As Integer)
-      If Position > 63 Then
+      If position > 63 Then
         ' Operate on High QWord
         If value <> 0 Then
           ' Set bit
-          _hi = _hi Or (1UL << (Position - 64))
+          _hi = _hi Or (1UL << (position - 64))
         Else ' Clear bit
-          _hi = _hi And Not (1UL << (Position - 64))
+          _hi = _hi And Not (1UL << (position - 64))
         End If
       Else ' Operate on Low QWord
         If value <> 0 Then
           ' Set bit
-          _lo = _lo Or (1UL << Position)
+          _lo = _lo Or (1UL << position)
         Else ' Clear bit
-          _lo = _lo And Not (1UL << Position)
+          _lo = _lo And Not (1UL << position)
         End If
       End If
     End Set
@@ -132,15 +133,15 @@ Public Class UInt128
   End Property
 
   ' TryParse converts a string to UInt128
-  Public Shared Function TryParse(argString As String, ByRef arg128 As UInt128) As Boolean
+  Public Shared Function TryParse(value As String, ByRef arg128 As UInt128) As Boolean
     ' Prime the return value
     arg128 = 0
     ' Check for bad characters
-    For i = 0 To argString.Length - 1
-      If "0123456789".Contains(argString.Substring(i, 1)) Then
+    For i = 0 To value.Length - 1
+      If "0123456789".Contains(value.Substring(i, 1)) Then
         ' Add the next digit - Use CUInt because we know it's a digit here
-        arg128 = arg128 * 10 + CUInt(argString.Substring(i, 1))
-      Else ' Bad character - toss the whole thing out
+        arg128 = arg128 * 10 + CUInt(value.Substring(i, 1))
+      Else ' Bad character - Toss the whole thing out
         arg128 = 0
         Return False
       End If
@@ -150,8 +151,8 @@ Public Class UInt128
   End Function
 
   ' Widen all Int/UInt types to UInt128. Reduces the number of overloads required for operators
-  Public Shared Widening Operator CType(ByVal argULng As ULong) As UInt128
-    Return New UInt128(0, argULng)
+  Public Shared Widening Operator CType(ByVal value As ULong) As UInt128
+    Return New UInt128(0, value)
   End Operator
 
   ' Narrow UInt128 to ULong
@@ -254,6 +255,7 @@ Public Class UInt128
   End Operator
 
   ' Division - Shift algorithm
+  ' Defined first as Integer division (\) and then referred to by standard division (/)
   ' Adapted from https://en.wikipedia.org/wiki/Division_algorithm
   Public Shared Operator \(ByVal argLeft As UInt128, ByVal argRight As UInt128) As UInt128
     ' Return division by zero error
@@ -290,6 +292,7 @@ Public Class UInt128
   End Operator
 
   ' Mod operator - Shift algorithm
+  ' Same algorithm as division, but return the remainder
   ' Adapted from https://en.wikipedia.org/wiki/Division_algorithm
   Public Shared Operator Mod(ByVal argLeft As UInt128, ByVal argRight As UInt128) As UInt128
     ' Return division by zero error
